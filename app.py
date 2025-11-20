@@ -112,6 +112,79 @@ def get_reports_by_patient(patient_first, patient_last):
     reports = {doc.id: doc.to_dict() for doc in docs}
     return jsonify(reports)
 
+# account methods
+
+def addAccount(email: str, password: str, role: str):
+    # Only two valid roles
+    if role not in ["doctor", "patient"]:
+        return {"success": False, "error": "Role must be 'doctor' or 'patient'."}
+
+    # Check if account already exists by email
+    existing = (
+        db.collection("accounts")
+        .where("email", "==", email)
+        .limit(1)
+        .get()
+    )
+
+    if existing:
+        return {"success": False, "error": "Account already exists"}
+
+    # Store password as plain string (NOT secure but requested)
+    account_data = {
+        "email": email,
+        "password": password,
+        "role": role
+    }
+
+    doc_ref = db.collection("accounts").add(account_data)
+    return {"success": True, "id": doc_ref[1].id}
+
+
+
+def checkValidAccount(email: str, password: str):
+    # Look up by email
+    docs = (
+        db.collection("accounts")
+        .where("email", "==", email)
+        .limit(1)
+        .get()
+    )
+
+    if not docs:
+        return {"valid": False, "error": "Invalid credentials"}
+
+    account = docs[0].to_dict()
+
+    # Compare plain-text passwords
+    if password != account["password"]:
+        return {"valid": False, "error": "Invalid credentials"}
+
+    return {
+        "valid": True,
+        "role": account["role"]
+    }
+
+@app.route("/accounts", methods=["POST"])
+def create_account():
+    data = request.json
+    result = addAccount(
+        data["email"],
+        data["password"],
+       	data["role"]
+    )
+    return jsonify(result)
+
+
+@app.route("/accounts/login", methods=["POST"])
+def login_account():
+    data = request.json
+    result = checkValidAccount(
+        data["email"],
+        data["password"]
+    )
+    return jsonify(result)
+
 
 @app.route("/", methods=["GET"])
 def index():
@@ -119,4 +192,5 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
