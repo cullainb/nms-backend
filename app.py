@@ -1,10 +1,12 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import os, json
 import firebase_admin
 from firebase_admin import credentials, firestore, initialize_app
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 app = Flask(__name__)
+CORS(app)
 
 # Initialize Firestore using environment variable
 cred_dict = json.loads(os.environ["FIREBASE_KEY_JSON"])
@@ -117,3 +119,4 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
