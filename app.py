@@ -115,11 +115,11 @@ def get_reports_by_patient(patient_first, patient_last):
 # account methods
 
 def addAccount(email: str, password: str, role: str):
-    # Only two valid roles
+    # only two valid roles, doctors created on react website, patients created on android app
     if role not in ["doctor", "patient"]:
         return {"success": False, "error": "Role must be 'doctor' or 'patient'."}
 
-    # Check if account already exists by email
+    # check if account already exists by searching for the email in each record
     existing = (
         db.collection("accounts")
         .where("email", "==", email)
@@ -130,7 +130,6 @@ def addAccount(email: str, password: str, role: str):
     if existing:
         return {"success": False, "error": "Account already exists"}
 
-    # Store password as plain string (NOT secure but requested)
     account_data = {
         "email": email,
         "password": password,
@@ -139,7 +138,6 @@ def addAccount(email: str, password: str, role: str):
 
     doc_ref = db.collection("accounts").add(account_data)
     return {"success": True, "id": doc_ref[1].id}
-
 
 
 def checkValidAccount(email: str, password: str):
@@ -156,7 +154,7 @@ def checkValidAccount(email: str, password: str):
 
     account = docs[0].to_dict()
 
-    # Compare plain-text passwords
+    # check if password matches
     if password != account["password"]:
         return {"valid": False, "error": "Invalid credentials"}
 
@@ -164,6 +162,7 @@ def checkValidAccount(email: str, password: str):
         "valid": True,
         "role": account["role"]
     }
+
 
 @app.route("/accounts", methods=["POST"])
 def create_account():
@@ -186,11 +185,44 @@ def login_account():
     return jsonify(result)
 
 
+# risk scores
+@app.route("/patients/<patient_id>/riskScores", methods=["POST"])
+def add_risk_score(patient_id):
+
+    # Make sure the patient exists
+    patient_ref = db.collection("patients").document(patient_id)
+    patient_doc = patient_ref.get()
+
+    if not patient_doc.exists:
+        return jsonify({"error": "Patient not found"}), 404
+
+    data = request.json  # risk score data coming from client
+    # reference the sub collection
+    scores_ref = patient_ref.collection("riskScores")
+
+    # get the existing score IDs
+    docs = scores_ref.stream()
+
+    existing_numbers = []
+    for doc in docs:
+        if doc.id.isdigit():
+            existing_numbers.append(int(doc.id))
+    next_id = max(existing_numbers) + 1 if existing_numbers else 1
+    # this creates a new risk score document
+    scores_ref.document(str(next_id)).set({
+        **data,
+        "createdAt": firestore.SERVER_TIMESTAMP
+    })
+    return jsonify({
+        "message": "Risk score added",
+        "patientId": patient_id,
+        "riskScoreId": str(next_id)
+    }), 201
+
+
 @app.route("/", methods=["GET"])
 def index():
     return "Firestore Flask API is running!"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
-
