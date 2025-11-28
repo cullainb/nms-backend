@@ -5,18 +5,22 @@ import firebase_admin
 from firebase_admin import credentials, firestore, initialize_app
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+# create flask app and enable cors
 app = Flask(__name__)
 CORS(app)
 
-# Initialize Firestore using environment variable
+# --------------------------
+# initialize firestore
+# --------------------------
 cred_dict = json.loads(os.environ["FIREBASE_KEY_JSON"])
 cred = credentials.Certificate(cred_dict)
-
-# Initialize Firebase
 initialize_app(cred)
 db = firestore.client()
 
-# doctor functions
+# ==========================
+# doctor stuff
+# ==========================
+
 @app.route("/doctors", methods=["POST"])
 def add_doctor():
     data = request.json
@@ -29,23 +33,27 @@ def add_doctor():
         "phone": data["phone"]
     }
     db.collection("doctors").document(doc_id).set(doctor_data)
-    return jsonify({"message": "Doctor added", "id": doc_id})
+    return jsonify({"message": "doctor added", "id": doc_id}), 201
+
 
 @app.route("/doctors", methods=["GET"])
 def get_all_doctors():
     docs = db.collection("doctors").stream()
     doctors = {doc.id: doc.to_dict() for doc in docs}
-    return jsonify(doctors)
+    return jsonify(doctors), 200
+
 
 @app.route("/doctors/<doctor_id>", methods=["GET"])
 def get_doctor(doctor_id):
     doc = db.collection("doctors").document(doctor_id).get()
     if doc.exists:
-        return jsonify(doc.to_dict())
-    else:
-        return jsonify({"error": "Doctor not found"}), 404
+        return jsonify(doc.to_dict()), 200
+    return jsonify({"error": "doctor not found"}), 404
 
-# patient functions
+# ==========================
+# patient stuff
+# ==========================
+
 @app.route("/patients", methods=["POST"])
 def add_patient():
     data = request.json
@@ -60,15 +68,20 @@ def add_patient():
         "createdAt": firestore.SERVER_TIMESTAMP
     }
     db.collection("patients").document(doc_id).set(patient_data)
-    return jsonify({"message": "Patient added", "id": doc_id})
+    return jsonify({"message": "patient added", "id": doc_id}), 201
+
 
 @app.route("/patients/<patient_id>", methods=["GET"])
 def get_patient(patient_id):
     doc = db.collection("patients").document(patient_id).get()
-    if doc.exists:
-        return jsonify(doc.to_dict())
-    else:
-        return jsonify({"error": "Patient not found"}), 404
+    if not doc.exists:
+        return jsonify({"error": "patient not found"}), 404
+    data = doc.to_dict()
+    # convert firestore references to string so json works
+    if "doctorId" in data and isinstance(data["doctorId"], firestore.DocumentReference):
+        data["doctorId"] = data["doctorId"].id
+    return jsonify(data), 200
+
 
 @app.route("/patients/by_doctor/<doctor_id>", methods=["GET"])
 def get_patients_by_doctor(doctor_id):
@@ -76,15 +89,23 @@ def get_patients_by_doctor(doctor_id):
     docs = db.collection("patients").where(
         filter=FieldFilter("doctorId", "==", doctor_ref)
     ).stream()
-    patients = {doc.id: doc.to_dict() for doc in docs}
-    return jsonify(patients)
+    patients = {}
+    for doc in docs:
+        data = doc.to_dict()
+        if "doctorId" in data and isinstance(data["doctorId"], firestore.DocumentReference):
+            data["doctorId"] = data["doctorId"].id
+        patients[doc.id] = data
+    return jsonify(patients), 200
 
-# report functions
+# ==========================
+# report stuff
+# ==========================
+
 @app.route("/reports", methods=["POST"])
 def add_report():
     data = request.json
-    doc_id = f"{data['patient_first'].capitalize()}{data['patient_last'].capitalize()}{data['report_type'].upper()}"
     patient_id = f"{data['patient_first'].capitalize()}{data['patient_last'].capitalize()}"
+    doc_id = f"{patient_id}{data['report_type'].upper()}"
     report_data = {
         "patientId": db.document(f"patients/{patient_id}"),
         "reportType": data["report_type"].upper(),
@@ -92,137 +113,134 @@ def add_report():
         "notes": data.get("notes", "")
     }
     db.collection("reports").document(doc_id).set(report_data)
-    return jsonify({"message": "Report added", "id": doc_id})
+    return jsonify({"message": "report added", "id": doc_id}), 201
+
 
 @app.route("/reports/<report_id>", methods=["GET"])
 def get_report(report_id):
     doc = db.collection("reports").document(report_id).get()
-    if doc.exists:
-        return jsonify(doc.to_dict())
-    else:
-        return jsonify({"error": "Report not found"}), 404
+    if not doc.exists:
+        return jsonify({"error": "report not found"}), 404
+    data = doc.to_dict()
+    # convert patientId reference to string
+    if "patientId" in data and isinstance(data["patientId"], firestore.DocumentReference):
+        data["patientId"] = data["patientId"].id
+    return jsonify(data), 200
 
-@app.route("/reports/by_patient/<patient_first>/<patient_last>", methods=["GET"])
-def get_reports_by_patient(patient_first, patient_last):
-    patient_id = f"{patient_first.capitalize()}{patient_last.capitalize()}"
+
+@app.route("/reports/by_patient/<first>/<last>", methods=["GET"])
+def get_reports_by_patient(first, last):
+    patient_id = f"{first.capitalize()}{last.capitalize()}"
     patient_ref = db.document(f"patients/{patient_id}")
     docs = db.collection("reports").where(
         filter=FieldFilter("patientId", "==", patient_ref)
     ).stream()
-    reports = {doc.id: doc.to_dict() for doc in docs}
-    return jsonify(reports)
+    reports = {}
+    for doc in docs:
+        data = doc.to_dict()
+        if "patientId" in data and isinstance(data["patientId"], firestore.DocumentReference):
+            data["patientId"] = data["patientId"].id
+        reports[doc.id] = data
+    return jsonify(reports), 200
 
-# account methods
+# ==========================
+# account stuff
+# ==========================
 
 def addAccount(email: str, password: str, role: str):
-    # only two valid roles, doctors created on react website, patients created on android app
     if role not in ["doctor", "patient"]:
-        return {"success": False, "error": "Role must be 'doctor' or 'patient'."}
-
-    # check if account already exists by searching for the email in each record
-    existing = (
-        db.collection("accounts")
-        .where("email", "==", email)
-        .limit(1)
-        .get()
-    )
-
+        return {"success": False, "error": "role must be doctor or patient"}
+    existing = db.collection("accounts").where("email", "==", email).limit(1).get()
     if existing:
-        return {"success": False, "error": "Account already exists"}
-
-    account_data = {
-        "email": email,
-        "password": password,
-        "role": role
-    }
-
+        return {"success": False, "error": "account already exists"}
+    account_data = {"email": email, "password": password, "role": role}
     doc_ref = db.collection("accounts").add(account_data)
     return {"success": True, "id": doc_ref[1].id}
 
 
 def checkValidAccount(email: str, password: str):
-    # Look up by email
-    docs = (
-        db.collection("accounts")
-        .where("email", "==", email)
-        .limit(1)
-        .get()
-    )
-
+    docs = db.collection("accounts").where("email", "==", email).limit(1).get()
     if not docs:
-        return {"valid": False, "error": "Invalid credentials"}
-
+        return {"valid": False, "error": "invalid credentials"}
     account = docs[0].to_dict()
-
-    # check if password matches
     if password != account["password"]:
-        return {"valid": False, "error": "Invalid credentials"}
-
-    return {
-        "valid": True,
-        "role": account["role"]
-    }
+        return {"valid": False, "error": "invalid credentials"}
+    return {"valid": True, "role": account["role"]}
 
 
 @app.route("/accounts", methods=["POST"])
 def create_account():
     data = request.json
-    result = addAccount(
-        data["email"],
-        data["password"],
-       	data["role"]
-    )
+    result = addAccount(data["email"], data["password"], data["role"])
     return jsonify(result)
 
 
 @app.route("/accounts/login", methods=["POST"])
 def login_account():
     data = request.json
-    result = checkValidAccount(
-        data["email"],
-        data["password"]
-    )
+    result = checkValidAccount(data["email"], data["password"])
     return jsonify(result)
 
+# ==========================
+# risk score stuff
+# ==========================
 
-# risk scores
 @app.route("/patients/<patient_id>/riskScores", methods=["POST"])
 def add_risk_score(patient_id):
-
-    # Make sure the patient exists
     patient_ref = db.collection("patients").document(patient_id)
     patient_doc = patient_ref.get()
-
     if not patient_doc.exists:
-        return jsonify({"error": "Patient not found"}), 404
-
-    data = request.json  # risk score data coming from client
-    # reference the sub collection
+        return jsonify({"error": "patient not found"}), 404
+    data = request.json
     scores_ref = patient_ref.collection("riskScores")
+    docs = scores_ref.stream()
+    existing_numbers = [int(doc.id) for doc in docs if doc.id.isdigit()]
+    next_id = max(existing_numbers) + 1 if existing_numbers else 1
+    scores_ref.document(str(next_id)).set({**data, "createdAt": firestore.SERVER_TIMESTAMP})
+    return jsonify({"message": "risk score added", "patientId": patient_id, "riskScoreId": str(next_id)}), 201
 
-    # get the existing score IDs
+# new method: get the most recent risk score
+@app.route("/patients/<patient_id>/riskScores/latest", methods=["GET"])
+def get_latest_risk_score(patient_id):
+    patient_ref = db.collection("patients").document(patient_id)
+    patient_doc = patient_ref.get()
+    if not patient_doc.exists:
+        return jsonify({"error": "patient not found"}), 404
+
+    scores_ref = patient_ref.collection("riskScores")
     docs = scores_ref.stream()
 
-    existing_numbers = []
+    latest_score = None
+    max_id = -1
     for doc in docs:
-        if doc.id.isdigit():
-            existing_numbers.append(int(doc.id))
-    next_id = max(existing_numbers) + 1 if existing_numbers else 1
-    # this creates a new risk score document
-    scores_ref.document(str(next_id)).set({
-        **data,
-        "createdAt": firestore.SERVER_TIMESTAMP
-    })
-    return jsonify({
-        "message": "Risk score added",
-        "patientId": patient_id,
-        "riskScoreId": str(next_id)
-    }), 201
+        try:
+            doc_id = int(doc.id)
+        except ValueError:
+            continue
+        if doc_id > max_id:
+            max_id = doc_id
+            latest_score = doc.to_dict()
 
+    if not latest_score:
+        return jsonify({"error": "no risk scores found"}), 404
+
+    return jsonify({
+        "patientId": patient_id,
+        "riskScoreId": str(max_id),
+        "data": latest_score
+    }), 200
+
+# ==========================
+# homepage route
+# ==========================
 
 @app.route("/", methods=["GET"])
 def index():
-    return "Firestore Flask API is running!"
+    return "firestore flask api is running!"
+
+# ==========================
+# run the app
+# ==========================
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
