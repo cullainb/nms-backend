@@ -191,15 +191,32 @@ def add_risk_score(patient_id):
     patient_doc = patient_ref.get()
     if not patient_doc.exists:
         return jsonify({"error": "patient not found"}), 404
+
     data = request.json
+
+    # extract new fields
+    risk_score_data = {
+        "riskScore": data["riskScore"],            # number
+        "riskLevel": data["riskLevel"],            # string
+        "familyHistory": data["familyHistory"],    # string
+        "assessmentDate": data["assessmentDate"],  # timestamp string from client
+        "createdAt": firestore.SERVER_TIMESTAMP    # auto timestamp
+    }
+
     scores_ref = patient_ref.collection("riskScores")
     docs = scores_ref.stream()
     existing_numbers = [int(doc.id) for doc in docs if doc.id.isdigit()]
     next_id = max(existing_numbers) + 1 if existing_numbers else 1
-    scores_ref.document(str(next_id)).set({**data, "createdAt": firestore.SERVER_TIMESTAMP})
-    return jsonify({"message": "risk score added", "patientId": patient_id, "riskScoreId": str(next_id)}), 201
 
-# new method: get the most recent risk score
+    scores_ref.document(str(next_id)).set(risk_score_data)
+
+    return jsonify({
+        "message": "risk score added",
+        "patientId": patient_id,
+        "riskScoreId": str(next_id)
+    }), 201
+
+
 @app.route("/patients/<patient_id>/riskScores/latest", methods=["GET"])
 def get_latest_risk_score(patient_id):
     patient_ref = db.collection("patients").document(patient_id)
@@ -212,11 +229,13 @@ def get_latest_risk_score(patient_id):
 
     latest_score = None
     max_id = -1
+
     for doc in docs:
         try:
             doc_id = int(doc.id)
         except ValueError:
             continue
+
         if doc_id > max_id:
             max_id = doc_id
             latest_score = doc.to_dict()
@@ -229,6 +248,7 @@ def get_latest_risk_score(patient_id):
         "riskScoreId": str(max_id),
         "data": latest_score
     }), 200
+
 
 # ==========================
 # homepage route
@@ -244,3 +264,4 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
