@@ -148,8 +148,8 @@ def get_reports_by_patient(first, last):
 # ==========================
 
 def addAccount(email: str, password: str, role: str):
-    if role not in ["doctor", "patient"]:
-        return {"success": False, "error": "role must be doctor or patient"}
+    if role not in ["doctor", "patient", "admin"]:
+        return {"success": False, "error": "role must be doctor, patient or admin"}
     existing = db.collection("accounts").where("email", "==", email).limit(1).get()
     if existing:
         return {"success": False, "error": "account already exists"}
@@ -264,4 +264,5 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
