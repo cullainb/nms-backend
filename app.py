@@ -358,12 +358,11 @@ def get_latest_risk_score(patient_id):
 def create_support_ticket():
     data = request.json
 
-    if not data or "message" not in data:
+    if not data or "supportIssue" not in data:
         return jsonify({"error": "Support message is required"}), 400
 
     ticket_data = {
-        "message": data["message"],
-        "createdAt": firestore.SERVER_TIMESTAMP
+        "supportIssue": data["supportIssue"]
     }
 
     doc_ref = db.collection("supportTickets").add(ticket_data)
@@ -400,6 +399,60 @@ def delete_support_ticket(ticket_id):
         "ticketId": ticket_id
     })
 
+# ==========================
+# review stuff
+# ==========================
+
+@app.route("/reviews", methods=["POST"])
+def create_review():
+    data = request.json
+
+    if not data or "rating" not in data or "review" not in data:
+        return jsonify({"error": "rating and review fields are required"}), 400
+
+    # Basic validation
+    if not isinstance(data["rating"], (int, float)):
+        return jsonify({"error": "rating must be a number"}), 400
+
+    review_data = {
+        "rating": data["rating"],
+        "review": data["review"],
+        "createdAt": firestore.SERVER_TIMESTAMP
+    }
+
+    doc_ref = db.collection("reviews").add(review_data)
+
+    return jsonify({
+        "message": "Review created",
+        "reviewId": doc_ref[1].id
+    }), 201
+
+@app.route("/reviews", methods=["GET"])
+def get_all_reviews():
+    docs = db.collection("reviews").stream()
+
+    reviews = {
+        doc.id: doc.to_dict()
+        for doc in docs
+    }
+
+    return jsonify(reviews)
+
+@app.route("/reviews/<review_id>", methods=["DELETE"])
+def delete_review(review_id):
+    review_ref = db.collection("reviews").document(review_id)
+    doc = review_ref.get()
+
+    if not doc.exists:
+        return jsonify({"error": "Review not found"}), 404
+
+    review_ref.delete()
+
+    return jsonify({
+        "message": "Review deleted",
+        "reviewId": review_id
+    })
+
 
 # ==========================
 # homepage route
@@ -415,6 +468,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
