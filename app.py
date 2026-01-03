@@ -351,6 +351,57 @@ def get_latest_risk_score(patient_id):
 
 
 # ==========================
+# support ticket stuff
+# ==========================
+
+@app.route("/supportTickets", methods=["POST"])
+def create_support_ticket():
+    data = request.json
+
+    if not data or "message" not in data:
+        return jsonify({"error": "Support message is required"}), 400
+
+    ticket_data = {
+        "message": data["message"],
+        "createdAt": firestore.SERVER_TIMESTAMP
+    }
+
+    doc_ref = db.collection("supportTickets").add(ticket_data)
+
+    return jsonify({
+        "message": "Support ticket created",
+        "ticketId": doc_ref[1].id
+    }), 201
+
+
+@app.route("/supportTickets", methods=["GET"])
+def get_all_support_tickets():
+    docs = db.collection("supportTickets").stream()
+
+    tickets = {
+        doc.id: doc.to_dict()
+        for doc in docs
+    }
+
+    return jsonify(tickets)
+
+@app.route("/supportTickets/<ticket_id>", methods=["DELETE"])
+def delete_support_ticket(ticket_id):
+    ticket_ref = db.collection("supportTickets").document(ticket_id)
+    doc = ticket_ref.get()
+
+    if not doc.exists:
+        return jsonify({"error": "Support ticket not found"}), 404
+
+    ticket_ref.delete()
+
+    return jsonify({
+        "message": "Support ticket deleted",
+        "ticketId": ticket_id
+    })
+
+
+# ==========================
 # homepage route
 # ==========================
 
@@ -364,6 +415,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
