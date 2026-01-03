@@ -50,6 +50,31 @@ def get_doctor(doctor_id):
         return jsonify(doc.to_dict()), 200
     return jsonify({"error": "doctor not found"}), 404
 
+
+@app.route("/doctors/by_email", methods=["POST"])
+def get_doctor_by_email():
+    data = request.json
+
+    if not data or "email" not in data:
+        return jsonify({"error": "Email is required"}), 400
+
+    email = data["email"]
+
+    docs = (
+        db.collection("doctors")
+        .where(filter=FieldFilter("email", "==", email))
+        .limit(1)
+        .stream()
+    )
+
+    for doc in docs:
+        return jsonify({
+            "id": doc.id,
+            **doc.to_dict()
+        })
+
+    return jsonify({"error": "Doctor not found"}), 404
+
 @app.route("/doctors/<doctor_id>", methods=["DELETE"])
 def delete_doctor(doctor_id):
     doctor_ref = db.collection("doctors").document(doctor_id)
@@ -410,14 +435,16 @@ def create_review():
     if not data or "rating" not in data or "review" not in data:
         return jsonify({"error": "rating and review fields are required"}), 400
 
-    # Basic validation
+    # validation
     if not isinstance(data["rating"], (int, float)):
         return jsonify({"error": "rating must be a number"}), 400
 
+    if rating < 1 or rating > 5:
+        return jsonify({"error": "rating must be between 1 and 5"}), 400
+
     review_data = {
         "rating": data["rating"],
-        "review": data["review"],
-        "createdAt": firestore.SERVER_TIMESTAMP
+        "review": data["review"]
     }
 
     doc_ref = db.collection("reviews").add(review_data)
@@ -468,6 +495,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
