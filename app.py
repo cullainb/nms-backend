@@ -50,6 +50,21 @@ def get_doctor(doctor_id):
         return jsonify(doc.to_dict()), 200
     return jsonify({"error": "doctor not found"}), 404
 
+@app.route("/doctors/<doctor_id>", methods=["DELETE"])
+def delete_doctor(doctor_id):
+    doctor_ref = db.collection("doctors").document(doctor_id)
+    doc = doctor_ref.get()
+
+    if not doc.exists:
+        return jsonify({"error": "Doctor not found"}), 404
+
+    doctor_ref.delete()
+
+    return jsonify({
+        "message": "Doctor deleted",
+        "id": doctor_id
+    })
+
 # ==========================
 # patient stuff
 # ==========================
@@ -96,6 +111,27 @@ def get_patients_by_doctor(doctor_id):
             data["doctorId"] = data["doctorId"].id
         patients[doc.id] = data
     return jsonify(patients), 200
+
+@app.route("/patients/<patient_id>", methods=["DELETE"])
+def delete_patient(patient_id):
+    patient_ref = db.collection("patients").document(patient_id)
+    doc = patient_ref.get()
+
+    if not doc.exists:
+        return jsonify({"error": "Patient not found"}), 404
+
+    # delete patients risk scores as well
+    risk_scores = patient_ref.collection("riskScores").stream()
+    for score in risk_scores:
+        score.reference.delete()
+
+    patient_ref.delete()
+
+    return jsonify({
+        "message": "Patient deleted",
+        "id": patient_id
+    })
+
 
 # ==========================
 # report stuff
@@ -264,5 +300,6 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
