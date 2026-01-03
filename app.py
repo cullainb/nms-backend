@@ -65,6 +65,36 @@ def delete_doctor(doctor_id):
         "id": doctor_id
     })
 
+@app.route("/doctors/<doctor_id>", methods=["PUT"])
+def edit_doctor(doctor_id):
+    doctor_ref = db.collection("doctors").document(doctor_id)
+    doc = doctor_ref.get()
+
+    if not doc.exists:
+        return jsonify({"error": "Doctor not found"}), 404
+
+    data = request.json
+
+    allowed_fields = ["firstName", "lastName", "email", "address", "phone"]
+
+    update_data = {
+        field: value
+        for field, value in data.items()
+        if field in allowed_fields
+    }
+
+    if not update_data:
+        return jsonify({"error": "No valid fields provided"}), 400
+
+    doctor_ref.update(update_data)
+
+    return jsonify({
+        "message": "Doctor updated",
+        "id": doctor_id,
+        "updatedFields": list(update_data.keys())
+    })
+
+
 # ==========================
 # patient stuff
 # ==========================
@@ -131,6 +161,40 @@ def delete_patient(patient_id):
         "message": "Patient deleted",
         "id": patient_id
     })
+
+@app.route("/patients/<patient_id>", methods=["PUT"])
+def edit_patient(patient_id):
+    patient_ref = db.collection("patients").document(patient_id)
+    doc = patient_ref.get()
+
+    if not doc.exists:
+        return jsonify({"error": "Patient not found"}), 404
+
+    data = request.json
+
+    allowed_fields = ["firstName", "lastName", "age", "gender", "notes"]
+
+    update_data = {
+        field: value
+        for field, value in data.items()
+        if field in allowed_fields
+    }
+
+    # Handle doctor reassignment if provided
+    if "doctor_id" in data:
+        update_data["doctorId"] = db.document(f"doctors/{data['doctor_id']}")
+
+    if not update_data:
+        return jsonify({"error": "No valid fields provided"}), 400
+
+    patient_ref.update(update_data)
+
+    return jsonify({
+        "message": "Patient updated",
+        "id": patient_id,
+        "updatedFields": list(update_data.keys())
+    })
+
 
 
 # ==========================
@@ -300,6 +364,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
