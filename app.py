@@ -532,18 +532,38 @@ def delete_review(review_id):
     })
 
 # ==========================
-# export patient data by doctor ID
+# export patient data by doctor email
 # ==========================
 
-@app.route("/export/doctors/<doctor_id>/patients", methods=["GET"])
-def export_doctor_patients(doctor_id):
-    doctor_ref = db.document(f"doctors/{doctor_id}")
+@app.route("/export/doctor/patients", methods=["POST"])
+def export_doctor_patients_by_email():
+    data = request.json
 
-    # doctor exists
-    if not doctor_ref.get().exists:
+    if not data or "email" not in data:
+        return jsonify({"error": "Doctor email required"}), 400
+
+    email = data["email"]
+
+    # Find doctor by email
+    docs = (
+        db.collection("doctors")
+        .where(filter=FieldFilter("email", "==", email))
+        .limit(1)
+        .stream()
+    )
+
+    doctor_doc = None
+    for d in docs:
+        doctor_doc = d
+        break
+
+    if not doctor_doc:
         return jsonify({"error": "Doctor not found"}), 404
 
-    # get all patients for this doctor
+    doctor_id = doctor_doc.id
+    doctor_ref = doctor_doc.reference
+
+    # Continue exactly as before
     patients = db.collection("patients").where(
         filter=FieldFilter("doctorId", "==", doctor_ref)
     ).stream()
@@ -551,7 +571,6 @@ def export_doctor_patients(doctor_id):
     output = io.StringIO()
     writer = csv.writer(output)
 
-    # header
     writer.writerow([
         "doctorId",
         "patientId",
@@ -569,22 +588,13 @@ def export_doctor_patients(doctor_id):
 
     for patient in patients:
         patient_data = patient.to_dict()
-        patient_id = patient.id
 
-        risk_scores_ref = (
-            db.collection("patients")
-            .document(patient_id)
-            .collection("riskScores")
-        )
-
-        risk_scores = risk_scores_ref.stream()
-
+        risk_scores = patient.reference.collection("riskScores").stream()
         for score in risk_scores:
             score_data = score.to_dict()
-
             writer.writerow([
                 doctor_id,
-                patient_id,
+                patient.id,
                 patient_data.get("firstName"),
                 patient_data.get("lastName"),
                 patient_data.get("age"),
@@ -622,6 +632,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
