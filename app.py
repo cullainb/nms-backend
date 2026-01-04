@@ -169,6 +169,36 @@ def get_patients_by_doctor(doctor_id):
         patients[doc.id] = data
     return jsonify(patients), 200
 
+
+@app.route("/patients/<patient_id>/mark_paid", methods=["POST"])
+def mark_patient_paid(patient_id):
+    patient_ref = db.collection("patients").document(patient_id)
+    doc = patient_ref.get()
+
+    if not doc.exists:
+        return jsonify({"error": "Patient not found"}), 404
+
+    patient_data = doc.to_dict()
+
+    # checks if user has paid
+    if patient_data.get("paid") is True:
+        return jsonify({
+            "message": "Patient already paid",
+            "patientId": patient_id
+        })
+
+    # set paid to true
+    patient_ref.update({
+        "paid": True,
+        "paidAt": firestore.SERVER_TIMESTAMP
+    })
+
+    return jsonify({
+        "message": "Patient successfully paid",
+        "patientId": patient_id
+    })
+
+
 @app.route("/patients/<patient_id>", methods=["DELETE"])
 def delete_patient(patient_id):
     patient_ref = db.collection("patients").document(patient_id)
@@ -573,6 +603,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
