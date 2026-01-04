@@ -1,5 +1,7 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
+import csv
+import io
 import os, json
 import firebase_admin
 from firebase_admin import credentials, firestore, initialize_app
@@ -480,6 +482,82 @@ def delete_review(review_id):
         "reviewId": review_id
     })
 
+# ==========================
+# export patient data by doctor ID
+# ==========================
+
+@app.route("/export/doctor/<doctor_id>/patients", methods=["GET"])
+def export_doctor_patients(doctor_id):
+    doctor_ref = db.document(f"doctors/{doctor_id}")
+
+    # doctor exists
+    if not doctor_ref.get().exists:
+        return jsonify({"error": "Doctor not found"}), 404
+
+    # get all patients for this doctor
+    patients = db.collection("patients").where(
+        filter=FieldFilter("doctorId", "==", doctor_ref)
+    ).stream()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # header
+    writer.writerow([
+        "doctorId",
+        "patientId",
+        "firstName",
+        "lastName",
+        "age",
+        "gender",
+        "riskScoreId",
+        "riskScore",
+        "riskLevel",
+        "familyHistory",
+        "lastAssessmentDate",
+        "createdAt"
+    ])
+
+    for patient in patients:
+        patient_data = patient.to_dict()
+        patient_id = patient.id
+
+        risk_scores_ref = (
+            db.collection("patients")
+            .document(patient_id)
+            .collection("riskScores")
+        )
+
+        risk_scores = risk_scores_ref.stream()
+
+        for score in risk_scores:
+            score_data = score.to_dict()
+
+            writer.writerow([
+                doctor_id,
+                patient_id,
+                patient_data.get("firstName"),
+                patient_data.get("lastName"),
+                patient_data.get("age"),
+                patient_data.get("gender"),
+                score.id,
+                score_data.get("riskScore"),
+                score_data.get("riskLevel"),
+                score_data.get("familyHistory"),
+                score_data.get("lastAssessmentDate"),
+                score_data.get("createdAt")
+            ])
+
+    output.seek(0)
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename={doctor_id}_patients_export.csv"
+        }
+    )
+
 
 # ==========================
 # homepage route
@@ -495,6 +573,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
