@@ -199,6 +199,25 @@ def mark_patient_paid(patient_id):
     })
 
 
+@app.route("/patients/<patient_id>/paid_status", methods=["GET"])
+def get_patient_paid_status(patient_id):
+    patient_ref = db.collection("patients").document(patient_id)
+    doc = patient_ref.get()
+
+    if not doc.exists:
+        return jsonify({"error": "Patient not found"}), 404
+
+    patient_data = doc.to_dict()
+
+    # default to false
+    paid_status = patient_data.get("paid", False)
+
+    return jsonify({
+        "patientId": patient_id,
+        "paid": paid_status
+    })
+
+
 @app.route("/patients/<patient_id>", methods=["DELETE"])
 def delete_patient(patient_id):
     patient_ref = db.collection("patients").document(patient_id)
@@ -603,6 +622,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
