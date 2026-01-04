@@ -535,7 +535,7 @@ def delete_review(review_id):
 # export patient data by doctor ID
 # ==========================
 
-@app.route("/export/doctor/<doctor_id>/patients", methods=["GET"])
+@app.route("/export/doctors/<doctor_id>/patients", methods=["GET"])
 def export_doctor_patients(doctor_id):
     doctor_ref = db.document(f"doctors/{doctor_id}")
 
@@ -622,6 +622,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
