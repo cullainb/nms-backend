@@ -510,6 +510,8 @@ def create_review():
     if not data or "rating" not in data or "review" not in data:
         return jsonify({"error": "rating and review fields are required"}), 400
 
+    rating = data["rating"]
+
     # validation
     if not isinstance(data["rating"], (int, float)):
         return jsonify({"error": "rating must be a number"}), 400
@@ -656,6 +658,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
