@@ -392,6 +392,30 @@ def add_risk_score(patient_id):
         "riskScoreId": str(next_id)
     }), 201
 
+@app.route("/patients/<patient_id>/risk-scores", methods=["GET"])
+def get_patient_risk_scores(patient_id):
+    patient_ref = db.collection("patients").document(patient_id)
+    patient_doc = patient_ref.get()
+
+    if not patient_doc.exists:
+        return jsonify({"error": "Patient not found"}), 404
+
+    risk_scores_ref = patient_ref.collection("riskScores")
+    docs = risk_scores_ref.stream()
+
+    risk_scores = []
+
+    for doc in docs:
+        data = doc.to_dict()
+        data["id"] = doc.id  # include document ID
+        risk_scores.append(data)
+
+    return jsonify({
+        "patientId": patient_id,
+        "count": len(risk_scores),
+        "riskScores": risk_scores
+    })
+
 
 @app.route("/patients/<patient_id>/riskScores/latest", methods=["GET"])
 def get_latest_risk_score(patient_id):
@@ -632,6 +656,7 @@ def index():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
 
 
